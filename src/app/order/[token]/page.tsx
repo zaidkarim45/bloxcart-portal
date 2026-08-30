@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { RealOrderView } from "@/components/order/real-order-view";
+import { RealOrderPageClient } from "@/components/order/real-order-page-client";
 import { getOrderByToken } from "@/lib/orders/get-order";
 
 export const metadata: Metadata = {
@@ -29,5 +29,5 @@ export default async function OrderTokenPage({
     );
   }
 
-  return <RealOrderView order={result.order} />;
+  return <RealOrderPageClient initialOrder={result.order} token={token} />;
 }
