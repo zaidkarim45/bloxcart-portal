@@ -59,37 +59,50 @@ function mapRowToOrder(row: OrderRow): Order {
   };
 }
 
-export async function getOrderByToken(token: string): Promise<Order | null> {
-  // Everything here -- including client construction, which throws if
-  // Supabase isn't configured -- is wrapped in one try/catch so a
-  // misconfiguration never crashes the page with Next's generic error
-  // screen. The customer just sees "order not found" either way; the real
-  // reason (bad config vs. genuinely no such order) goes to server logs,
-  // never the client (see spec: friendly errors, no stack traces exposed).
+export type GetOrderResult =
+  | { ok: true; order: Order }
+  | { ok: false; reason: "not_configured" | "query_failed" | "not_found"; detail: string };
+
+/**
+ * Returns a discriminated result instead of null-for-everything. This
+ * project is still pre-launch (no real customers can hit this yet), so
+ * while we're bringing the real database online it's more useful for
+ * `/order/[token]` to show the *actual* reason on screen than to collapse
+ * "misconfigured" and "genuinely no such order" into the same blank 404 --
+ * that distinction is exactly what's been impossible to tell apart the
+ * last few debugging rounds. Tighten this back to a uniform not-found
+ * before real customers can reach this route.
+ */
+export async function getOrderByToken(token: string): Promise<GetOrderResult> {
+  let supabase;
   try {
-    const supabase = getSupabaseServerClient();
-    const { data, error } = await supabase
-      .from("orders")
-      .select(
-        `
-        id, public_order_number, status, total, currency,
-        customer_ready_at, delivered_at, created_at,
-        roblox_accounts ( roblox_user_id, username, display_name, avatar_url ),
-        order_items ( id, name, image_url, quantity, price, fulfilled )
-      `
-      )
-      .eq("public_access_token", token)
-      .maybeSingle<OrderRow>();
-
-    if (error) {
-      console.error("getOrderByToken query failed:", error.message);
-      return null;
-    }
-    if (!data) return null;
-
-    return mapRowToOrder(data);
+    supabase = getSupabaseServerClient();
   } catch (err) {
-    console.error("getOrderByToken failed:", err instanceof Error ? err.message : err);
-    return null;
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("getOrderByToken: Supabase not configured:", detail);
+    return { ok: false, reason: "not_configured", detail };
   }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select(
+      `
+      id, public_order_number, status, total, currency,
+      customer_ready_at, delivered_at, created_at,
+      roblox_accounts ( roblox_user_id, username, display_name, avatar_url ),
+      order_items ( id, name, image_url, quantity, price, fulfilled )
+    `
+    )
+    .eq("public_access_token", token)
+    .maybeSingle<OrderRow>();
+
+  if (error) {
+    console.error("getOrderByToken query failed:", error.message);
+    return { ok: false, reason: "query_failed", detail: error.message };
+  }
+  if (!data) {
+    return { ok: false, reason: "not_found", detail: `No order with token "${token}".` };
+  }
+
+  return { ok: true, order: mapRowToOrder(data) };
 }
