@@ -14,7 +14,7 @@ import {
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { findUserByUsername } from "@/lib/roblox/mock-client";
+import { findUserByUsername } from "@/lib/roblox/client";
 import type { RobloxLookupError, RobloxProfile } from "@/lib/roblox/types";
 
 type Step = "search" | "loading" | "confirm" | "error";
