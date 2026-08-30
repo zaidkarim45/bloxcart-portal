@@ -69,10 +69,19 @@ the staff workflow — it does not touch Roblox/MM2 itself. Nothing outside
 
 - **Phase A** (scaffold, design tokens, folder structure): done.
 - **Phase B** (`/checkout`, mock data): done — see `components/checkout/`.
-- **Phase C** (`/order/[token]`, mock data): not started.
-- Everything from Phase D onward (Roblox linking, DB schema, realtime,
-  admin dashboard, Shopify webhooks, Discord, proof uploads, analytics):
-  not started.
+- **Phase C** (`/order/demo`, mock data): done — see `components/order/`,
+  `components/chat/`, `hooks/use-demo-order.ts`. Covers the full
+  customer-facing journey (link account → ready → queued → agent
+  assigned → delivery in progress → complete) driven by a client-side
+  mock state machine. Staff-side actions that don't exist yet (assign
+  agent, start/complete delivery) are exposed via a dev-only, collapsed-
+  by-default panel (`components/order/demo-controls.tsx`), gated by
+  `isDemoMode()` — must never render in production.
+- `/order/[token]` (real, persisted orders): not started — depends on
+  Phase E/F (DB schema + real state machine).
+- Everything from Phase D onward beyond the above (Roblox *real* lookup
+  service, DB schema, realtime, admin dashboard, Shopify webhooks,
+  Discord, proof uploads, analytics): not started.
 
 See the project's own phase list for the full order — this file gets
 updated at the end of each phase rather than duplicating that list here.
