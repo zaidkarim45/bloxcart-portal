@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------
+   Design tokens. Deep navy/near-black surfaces with a restrained violet
+   accent. These are plain CSS custom properties (Tailwind v4 reads
+   config from CSS, not tailwind.config.js) mapped into Tailwind's theme
+   via `@theme inline` below, so `bg-card`, `text-muted-foreground`,
+   `border-border`, etc. all work as ordinary utility classes.
+------------------------------------------------------------------------ */
+:root {
+  /* Surfaces, darkest to lightest */
+  --background: #0a0d14;
+  --elevated: #0f1420;
+  --card: #131a28;
+  --card-secondary: #171f30;
+  --input: #10161f;
+
+  /* Borders */
+  --border: rgba(148, 163, 184, 0.12);
+  --border-muted: rgba(148, 163, 184, 0.07);
+  --ring: #8b5cf6;
+
+  /* Brand accent (violet) */
+  --primary: #8b5cf6;
+  --primary-hover: #9d6cf9;
+  --primary-foreground: #ffffff;
+  --primary-glow: rgba(139, 92, 246, 0.35);
+
+  /* Status */
+  --success: #22c55e;
+  --success-foreground: #052e16;
+  --warning: #f59e0b;
+  --warning-foreground: #451a03;
+  --danger: #ef4444;
+  --danger-foreground: #450a0a;
+
+  /* Text */
+  --foreground: #f4f6fb;
+  --text-secondary: #a3adc2;
+  --text-muted: #6b7488;
+
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-elevated: var(--elevated);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-card-secondary: var(--card-secondary);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-border-muted: var(--border-muted);
+  --color-ring: var(--ring);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-glow: var(--primary-glow);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+
+  --color-muted-foreground: var(--text-secondary);
+  --color-subtle-foreground: var(--text-muted);
+
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 0.25rem);
+  --radius-xl: calc(var(--radius) + 0.5rem);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
