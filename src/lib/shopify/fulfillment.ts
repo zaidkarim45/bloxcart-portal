@@ -46,7 +46,7 @@ export async function fulfillShopifyOrder(shopifyOrderId: string): Promise<Shopi
   }
 
   const { fulfillmentCreateV2 } = await shopifyAdminGraphQL<FulfillmentCreateResponse>(
-    `mutation FulfillOrder($fulfillment: FulfillmentInput!) {
+    `mutation FulfillOrder($fulfillment: FulfillmentV2Input!) {
       fulfillmentCreateV2(fulfillment: $fulfillment) {
         fulfillment { id status }
         userErrors { field message }
