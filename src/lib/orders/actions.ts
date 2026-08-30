@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { workflowMessages } from "@/lib/delivery/messages";
+import { notifyDiscord } from "@/lib/discord/notify";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { RobloxProfile } from "@/lib/roblox/types";
 import type { MessageSender } from "@/lib/types/order";
@@ -141,7 +142,7 @@ export async function sendCustomerMessageAction(token: string, text: string): Pr
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, status")
+    .select("id, status, public_order_number")
     .eq("public_access_token", token)
     .maybeSingle();
 
@@ -150,9 +151,14 @@ export async function sendCustomerMessageAction(token: string, text: string): Pr
 
   await insertMessage(supabase, order.id, "customer", text);
 
-  // No staff/agent chat yet (Phase H) -- while an order is just sitting in
-  // the queue, at least acknowledge the message rather than leaving the
-  // customer wondering if it went anywhere.
+  await notifyDiscord(
+    `💬 **New message on order #${order.public_order_number}**\n"${text}"\nhttps://bloxcart-portal.vercel.app/staff/${order.id}`
+  );
+
+  // Staff can now reply directly from /staff/[id] (Phase H) -- while an
+  // order is just sitting in the queue with no staff reply yet, at least
+  // acknowledge the message rather than leaving the customer wondering if
+  // it went anywhere.
   if (order.status === "queued" || order.status === "customer_ready") {
     await insertMessage(
       supabase,

@@ -69,19 +69,44 @@ constraint) landing on `awaiting_account` → customer links their Roblox
 account for real (`lib/roblox/client.ts`, Roblox's own public API, no
 credentials needed) via `linkRobloxAccountAction`, landing on
 `awaiting_customer` → customer clicks "I'm Ready"
-(`markCustomerReadyAction`), landing on `queued`. Nothing past `queued`
-is wired up yet — there's no staff dashboard, so an order stuck at
-`queued` currently has to be moved along by hand-editing the Supabase
-table (Phase H fixes this).
+(`markCustomerReadyAction`), landing on `queued`. Past `queued`, staff
+now move the order along themselves from `/staff/[id]`
+(`updateOrderStatusAction`) rather than hand-editing the Supabase table.
 
 Chat is persisted for real now (`messages` table, `getOrderMessages`,
 `sendCustomerMessageAction`) -- the scripted assistant replies fire from
 the same actions that drive the state machine above, not from a
-client-side script. What's still missing is live push: `/order/[token]`
-only sees new messages/status after one of *this browser's* own actions
-triggers a `router.refresh()`. A staff reply or another tab's change
-won't appear until this page's next action or a manual reload -- that's
-Supabase Realtime, the other half of Phase G.
+client-side script. Staff can reply for real too, from `/staff/[id]`
+(`sendStaffMessageAction`, sender `"agent"`) -- same `messages` table and
+`ChatWindow` component the customer sees. What's still missing is live
+push: both `/order/[token]` and `/staff/[id]` only see new
+messages/status after one of *that browser's* own actions triggers a
+`router.refresh()`. The other side's change (a staff reply, a customer
+message, another tab) won't appear until this page's next action or a
+manual reload -- that's Supabase Realtime, the other half of Phase G.
+
+## Staff dashboard (Phase H)
+
+`/staff` (order list) and `/staff/[id]` (order detail: chat + a raw
+status dropdown covering every `OrderStatus`) are gated by
+`src/middleware.ts`, which redirects to `/staff/login` unless a valid
+session cookie is present. Auth is a single shared password
+(`STAFF_PASSWORD`) rather than per-account login (`staff_users` exists in
+the schema for later, once there's more than one operator) --
+`lib/staff/session.ts` stores a separate `STAFF_SESSION_SECRET` value in
+the cookie itself, so the password is never what's persisted client-side.
+Staff pages show the raw internal `OrderStatus`, unlike the customer-facing
+mapped copy in `lib/delivery/status-copy.ts` -- that mapping exists
+specifically to hide the raw state name from customers, not from staff.
+
+## Discord notifications (Phase K)
+
+`lib/discord/notify.ts#notifyDiscord()` posts a plain-text webhook message
+and is a deliberate no-op (not a throw) when `DISCORD_WEBHOOK_URL` isn't
+set, so a missing notification never breaks the order/chat flow that
+triggered it. Fired from two places: `createOrderFromShopifyPayload` (new
+order) and `sendCustomerMessageAction` (new customer chat message), both
+linking to that order's `/staff/[id]` page.
 
 ## Fulfillment abstraction
 
@@ -104,24 +129,22 @@ the staff workflow — it does not touch Roblox/MM2 itself. Nothing outside
   both `/order/demo` and `/order/[token]`.
 - **Phase E/F** (DB schema, persistence): done for the slice that's
   wired up — see "Order domain" above.
-- **Phase G** (chat): persistence done (see "Order domain" above); live
-  push (Supabase Realtime) not started.
-- **Phase L** (Shopify webhook): done for `orders/paid` → order creation.
-  The post-purchase auto-redirect (`/redirecting` + `/api/orders/lookup`)
-  is built but not wired up in Shopify yet — needs a Checkout UI
-  Extension (a real Shopify app), since the old Additional-Scripts
-  approach it would have used is fully retired platform-wide as of June
-  30, 2026. That requires the Shopify CLI running somewhere with real
-  network access, which this environment doesn't have — deploying it is
-  a follow-up task, not something blocking anything built so far.
-  Fulfillment write-back to Shopify (marking the Shopify order fulfilled
-  once delivered) isn't built.
-- `/order/[token]` is real and interactive up through "queued" (see
-  above), but has no chat and no realtime — the customer has to refresh
-  to see any status change a staff member makes.
-- **Not started**: Phase G (realtime, chat persistence), Phase H (staff/
-  admin dashboard — currently a hard gap, see "Order domain" above),
-  Phase J (proof uploads), Phase K (Discord notifications), Phase M
+- **Phase G** (chat): persistence done for both customer and staff sides
+  (see "Order domain" above); live push (Supabase Realtime) not started.
+- **Phase H** (staff dashboard): basic version done — see "Staff
+  dashboard" above. Single shared password, no per-agent accounts, no
+  realtime (same refresh caveat as `/order/[token]`).
+- **Phase K** (Discord notifications): done — see "Discord notifications"
+  above. New order and new customer message only; no notification yet
+  for a customer going quiet, delivery taking too long, etc.
+- **Phase L** (Shopify webhook + auto-redirect): done, end-to-end, on the
+  real live store — `orders/paid` webhook creates the order,
+  `order-redirect` (a real deployed Checkout UI Extension, see
+  `bloxcart-checkout-extension` repo) puts a button on the Thank You page
+  that lands the customer on `/redirecting` → `/order/[token]` within
+  seconds of paying. Fulfillment write-back to Shopify (marking the
+  Shopify order fulfilled once delivered) isn't built.
+- **Not started**: Phase G realtime push, Phase J (proof uploads), Phase M
   (analytics/reviews), Phase N (security review).
 
 See the project's own phase list for the full order — this file gets

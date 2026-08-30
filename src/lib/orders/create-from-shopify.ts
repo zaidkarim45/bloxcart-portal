@@ -1,5 +1,6 @@
 import "server-only";
 
+import { notifyDiscord } from "@/lib/discord/notify";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { generateOrderToken } from "@/lib/security/tokens";
 import type { ShopifyOrderPayload } from "@/lib/shopify/order-payload";
@@ -105,6 +106,10 @@ export async function createOrderFromShopifyPayload(
     actor_type: "system",
     metadata: { shopify_order_id: payload.id },
   });
+
+  await notifyDiscord(
+    `🛒 **New order ${payload.name}** — ${payload.currency} ${payload.total_price} — ${payload.email ?? "no email"}\nhttps://bloxcart-portal.vercel.app/staff/${order.id}`
+  );
 
   return { created: true, token };
 }
