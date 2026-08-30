@@ -87,17 +87,55 @@ manual reload -- that's Supabase Realtime, the other half of Phase G.
 
 ## Staff dashboard (Phase H)
 
-`/staff` (order list) and `/staff/[id]` (order detail: chat + a raw
-status dropdown covering every `OrderStatus`) are gated by
-`src/middleware.ts`, which redirects to `/staff/login` unless a valid
-session cookie is present. Auth is a single shared password
-(`STAFF_PASSWORD`) rather than per-account login (`staff_users` exists in
-the schema for later, once there's more than one operator) --
-`lib/staff/session.ts` stores a separate `STAFF_SESSION_SECRET` value in
-the cookie itself, so the password is never what's persisted client-side.
-Staff pages show the raw internal `OrderStatus`, unlike the customer-facing
-mapped copy in `lib/delivery/status-copy.ts` -- that mapping exists
-specifically to hide the raw state name from customers, not from staff.
+`/staff` (order list) and `/staff/[id]` (order detail: chat + status
+controls) are gated by `src/proxy.ts` (Next's renamed middleware
+convention), which redirects to `/staff/login` unless a valid session
+cookie is present. Auth is a single shared password (`STAFF_PASSWORD`)
+rather than per-account login (`staff_users` exists in the schema for
+later, once there's more than one operator) -- `lib/staff/session.ts`
+stores a separate `STAFF_SESSION_SECRET` value in the cookie itself, so
+the password is never what's persisted client-side. Staff pages show the
+raw internal `OrderStatus`, unlike the customer-facing mapped copy in
+`lib/delivery/status-copy.ts` -- that mapping exists specifically to hide
+the raw state name from customers, not from staff.
+
+`/staff/[id]`'s status control is split in two (`terminal-actions.tsx` +
+`staff-order-client.tsx`):
+
+- **Terminal actions** (Fulfilled / Cancel / Refund) are real Shopify
+  operations, not just a local status flip -- see "Shopify write-back"
+  below. Each is behind a confirmation dialog since they're irreversible
+  and move real money or trigger a real customer notification email.
+- **Workflow steps** (everything between `queued` and delivery) are a
+  plain internal status update with no Shopify call, tucked behind an
+  "Advanced" disclosure since they're mundane and shouldn't compete
+  visually with the three actions that actually matter.
+
+## Shopify write-back (`lib/shopify/`)
+
+`admin-client.ts#shopifyAdminGraphQL()` is the one place that calls
+Shopify's Admin GraphQL API (`SHOPIFY_STORE_DOMAIN` +
+`SHOPIFY_ADMIN_API_ACCESS_TOKEN`, a custom app's Admin API token with
+`read/write_orders` + `read/write_fulfillments` scopes). Two callers:
+
+- `fulfillment.ts#fulfillShopifyOrder()` -- fulfills every OPEN
+  fulfillment order on the Shopify order via `fulfillmentCreateV2`.
+- `cancel.ts` -- both `cancelShopifyOrder()` and `refundShopifyOrder()`
+  are the same `orderCancel` mutation with a different `refund` flag,
+  not two separate code paths. Deliberately not a hand-rolled
+  `refundCreate` with manually computed line items/amounts -- Shopify's
+  own cancel-with-refund already correctly handles tax, shipping, and the
+  original payment gateway, and reimplementing that math ourselves is
+  exactly the kind of thing that's easy to get subtly wrong with real
+  money. "Cancel" (no refund) is for mistaken/duplicate orders; "Refund"
+  (cancel + full refund) is the actual common case for this business,
+  which doesn't do partial refunds/exchanges.
+
+The staff actions that call these (`lib/staff/actions.ts`) always call
+Shopify first and only update our own `orders` row if Shopify confirms
+success -- never flip the internal status first and hope the Shopify call
+also succeeds, which could leave our database claiming "delivered" while
+the real store disagrees.
 
 ## Discord notifications (Phase K)
 
@@ -106,7 +144,9 @@ and is a deliberate no-op (not a throw) when `DISCORD_WEBHOOK_URL` isn't
 set, so a missing notification never breaks the order/chat flow that
 triggered it. Fired from two places: `createOrderFromShopifyPayload` (new
 order) and `sendCustomerMessageAction` (new customer chat message), both
-linking to that order's `/staff/[id]` page.
+linking to that order's `/staff/[id]` page. The three terminal staff
+actions (fulfill/cancel/refund) also fire a confirmation notification once
+Shopify and the DB both confirm success -- see "Shopify write-back" above.
 
 ## Fulfillment abstraction
 
@@ -131,19 +171,22 @@ the staff workflow — it does not touch Roblox/MM2 itself. Nothing outside
   wired up — see "Order domain" above.
 - **Phase G** (chat): persistence done for both customer and staff sides
   (see "Order domain" above); live push (Supabase Realtime) not started.
-- **Phase H** (staff dashboard): basic version done — see "Staff
-  dashboard" above. Single shared password, no per-agent accounts, no
-  realtime (same refresh caveat as `/order/[token]`).
+- **Phase H** (staff dashboard): done, including real Shopify write-back —
+  see "Staff dashboard" and "Shopify write-back" above. Single shared
+  password, no per-agent accounts, no realtime (same refresh caveat as
+  `/order/[token]`).
 - **Phase K** (Discord notifications): done — see "Discord notifications"
-  above. New order and new customer message only; no notification yet
-  for a customer going quiet, delivery taking too long, etc.
+  above. New order, new customer message, and terminal staff actions; no
+  notification yet for a customer going quiet, delivery taking too long,
+  etc.
 - **Phase L** (Shopify webhook + auto-redirect): done, end-to-end, on the
   real live store — `orders/paid` webhook creates the order,
   `order-redirect` (a real deployed Checkout UI Extension, see
   `bloxcart-checkout-extension` repo) puts a button on the Thank You page
   that lands the customer on `/redirecting` → `/order/[token]` within
-  seconds of paying. Fulfillment write-back to Shopify (marking the
-  Shopify order fulfilled once delivered) isn't built.
+  seconds of paying. Fulfillment write-back to Shopify is done (see
+  "Shopify write-back" above) — Cancel/Refund write-back is also done,
+  ahead of where Phase L originally scoped it.
 - **Not started**: Phase G realtime push, Phase J (proof uploads), Phase M
   (analytics/reviews), Phase N (security review).
 

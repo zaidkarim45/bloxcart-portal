@@ -53,7 +53,7 @@ export async function getStaffOrders(): Promise<StaffOrderSummary[]> {
   }));
 }
 
-export type StaffOrderDetail = Order & { customerEmail: string | null };
+export type StaffOrderDetail = Order & { customerEmail: string | null; shopifyOrderId: string | null };
 
 interface StaffOrderDetailRow {
   id: string;
@@ -64,6 +64,7 @@ interface StaffOrderDetailRow {
   customer_ready_at: string | null;
   delivered_at: string | null;
   created_at: string;
+  shopify_order_id: string | null;
   customers: { email: string } | null;
   roblox_accounts: {
     roblox_user_id: string;
@@ -88,7 +89,7 @@ export async function getStaffOrder(id: string): Promise<StaffOrderDetail | null
     .select(
       `
       id, public_order_number, status, total, currency,
-      customer_ready_at, delivered_at, created_at,
+      customer_ready_at, delivered_at, created_at, shopify_order_id,
       customers ( email ),
       roblox_accounts ( roblox_user_id, username, display_name, avatar_url ),
       order_items ( id, name, image_url, quantity, price, fulfilled )
@@ -111,6 +112,7 @@ export async function getStaffOrder(id: string): Promise<StaffOrderDetail | null
     total: Number(data.total),
     status: data.status,
     customerEmail: data.customers?.email ?? null,
+    shopifyOrderId: data.shopify_order_id,
     robloxAccount: data.roblox_accounts
       ? {
           id: data.roblox_accounts.roblox_user_id,
