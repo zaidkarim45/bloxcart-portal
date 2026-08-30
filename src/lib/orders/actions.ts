@@ -2,8 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 
+import { workflowMessages } from "@/lib/delivery/messages";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { RobloxProfile } from "@/lib/roblox/types";
+import type { MessageSender } from "@/lib/types/order";
+
+type SupabaseClient = ReturnType<typeof getSupabaseServerClient>;
+
+async function insertMessage(
+  supabase: SupabaseClient,
+  orderId: string,
+  sender: MessageSender,
+  content: string
+) {
+  await supabase.from("messages").insert({ order_id: orderId, sender, content });
+}
 
 /**
  * These two actions are the seed of the real order state machine (the
@@ -76,6 +89,14 @@ export async function linkRobloxAccountAction(
     metadata: { roblox_username: profile.username },
   });
 
+  await insertMessage(
+    supabase,
+    order.id,
+    "assistant",
+    workflowMessages.accountLinked({ ...profile, verified: true })
+  );
+  await insertMessage(supabase, order.id, "assistant", workflowMessages.readyCheck);
+
   revalidatePath(`/order/${token}`);
   return { ok: true };
 }
@@ -107,6 +128,39 @@ export async function markCustomerReadyAction(token: string): Promise<ActionResu
     to_status: "queued",
     actor_type: "customer",
   });
+
+  await insertMessage(supabase, order.id, "assistant", workflowMessages.customerReadyAck);
+  await insertMessage(supabase, order.id, "assistant", workflowMessages.waiting);
+
+  revalidatePath(`/order/${token}`);
+  return { ok: true };
+}
+
+export async function sendCustomerMessageAction(token: string, text: string): Promise<ActionResult> {
+  const supabase = getSupabaseServerClient();
+
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("id, status")
+    .eq("public_access_token", token)
+    .maybeSingle();
+
+  if (orderError) return { ok: false, error: orderError.message };
+  if (!order) return { ok: false, error: "Order not found." };
+
+  await insertMessage(supabase, order.id, "customer", text);
+
+  // No staff/agent chat yet (Phase H) -- while an order is just sitting in
+  // the queue, at least acknowledge the message rather than leaving the
+  // customer wondering if it went anywhere.
+  if (order.status === "queued" || order.status === "customer_ready") {
+    await insertMessage(
+      supabase,
+      order.id,
+      "assistant",
+      "We've received your message. Your order will remain active while you wait."
+    );
+  }
 
   revalidatePath(`/order/${token}`);
   return { ok: true };

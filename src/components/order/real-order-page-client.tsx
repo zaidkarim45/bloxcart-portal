@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+import { ChatWindow } from "@/components/chat/chat-window";
 import { CompletionCard } from "@/components/order/completion-card";
 import { LinkRobloxModal } from "@/components/order/link-roblox-modal";
 import { OrderHeader } from "@/components/order/order-header";
@@ -13,8 +14,12 @@ import { OrderMetadata } from "@/components/order/order-metadata";
 import { OrderProgress } from "@/components/order/order-progress";
 import { OrderTimeline } from "@/components/order/order-timeline";
 import { buildOrderTimeline } from "@/lib/delivery/timeline";
-import { linkRobloxAccountAction, markCustomerReadyAction } from "@/lib/orders/actions";
-import type { Order } from "@/lib/types/order";
+import {
+  linkRobloxAccountAction,
+  markCustomerReadyAction,
+  sendCustomerMessageAction,
+} from "@/lib/orders/actions";
+import type { ChatMessageData, Order } from "@/lib/types/order";
 import type { RobloxProfile } from "@/lib/roblox/types";
 
 /**
@@ -22,18 +27,41 @@ import type { RobloxProfile } from "@/lib/roblox/types";
  * every action here calls a server action that writes to Supabase, then
  * `router.refresh()` re-fetches the Server Component tree so what's on
  * screen always reflects the database, never optimistic local state that
- * could drift from it.
+ * could drift from it. Chat messages get one exception: a locally-held
+ * "pending" bubble for the customer's own just-sent message, cleared once
+ * the refreshed (authoritative) message list arrives, so sending doesn't
+ * feel laggy while still never trusting local state over the database.
+ *
+ * No live push yet (Supabase Realtime) -- if a staff member or another
+ * tab changes this order, this page won't see it until the next action or
+ * manual refresh. That's the remaining half of Phase G.
  */
-export function RealOrderPageClient({ initialOrder, token }: { initialOrder: Order; token: string }) {
+export function RealOrderPageClient({
+  initialOrder,
+  initialMessages,
+  token,
+}: {
+  initialOrder: Order;
+  initialMessages: ChatMessageData[];
+  token: string;
+}) {
   const router = useRouter();
-  // Deliberately not local state -- this prop changes when router.refresh()
-  // re-runs the Server Component parent after a server action, and this
-  // component should always reflect that fresh value rather than freezing
-  // whatever it first mounted with.
   const order = initialOrder;
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [pendingMessage, setPendingMessage] = useState<ChatMessageData | null>(null);
+
+  // Clears the optimistic bubble once a fresh (authoritative) message list
+  // arrives from the server -- adjusted during render rather than in an
+  // effect, per React's guidance for resetting state on a prop change.
+  const [seenMessages, setSeenMessages] = useState(initialMessages);
+  if (initialMessages !== seenMessages) {
+    setSeenMessages(initialMessages);
+    setPendingMessage(null);
+  }
+
+  const messages = pendingMessage ? [...initialMessages, pendingMessage] : initialMessages;
 
   const timeline = buildOrderTimeline(order);
   const fulfilledCount = order.items.filter((item) => item.fulfilled).length;
@@ -58,6 +86,22 @@ export function RealOrderPageClient({ initialOrder, token }: { initialOrder: Ord
       if (!result.ok) {
         setActionError(result.error ?? "Something went wrong. Please try again.");
         return;
+      }
+      router.refresh();
+    });
+  }
+
+  function handleSendMessage(text: string) {
+    setPendingMessage({
+      id: "pending",
+      sender: "customer",
+      text,
+      createdAt: new Date().toISOString(),
+    });
+    startTransition(async () => {
+      const result = await sendCustomerMessageAction(token, text);
+      if (!result.ok) {
+        setActionError(result.error ?? "Your message didn't send. Please try again.");
       }
       router.refresh();
     });
@@ -91,10 +135,14 @@ export function RealOrderPageClient({ initialOrder, token }: { initialOrder: Ord
                 onChangeAccount={() => setIsLinkModalOpen(true)}
                 onCustomerReady={handleCustomerReady}
               />
-              <p className="rounded-lg border border-border-muted bg-card px-4 py-3 text-xs text-muted-foreground">
-                Live chat with the delivery assistant isn&apos;t connected yet -- linking your
-                account and marking yourself ready both save for real, though.
-              </p>
+              <div className="h-[28rem]">
+                <ChatWindow
+                  messages={messages}
+                  isAssistantTyping={false}
+                  onSend={handleSendMessage}
+                  composerDisabled={!order.robloxAccount}
+                />
+              </div>
             </>
           )}
         </div>

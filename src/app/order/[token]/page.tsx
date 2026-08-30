@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { RealOrderPageClient } from "@/components/order/real-order-page-client";
 import { getOrderByToken } from "@/lib/orders/get-order";
+import { getOrderMessages } from "@/lib/orders/get-messages";
 
 export const metadata: Metadata = {
   title: "Order",
@@ -29,5 +30,7 @@ export default async function OrderTokenPage({
     );
   }
 
-  return <RealOrderPageClient initialOrder={result.order} token={token} />;
+  const messages = await getOrderMessages(result.order.id);
+
+  return <RealOrderPageClient initialOrder={result.order} initialMessages={messages} token={token} />;
 }

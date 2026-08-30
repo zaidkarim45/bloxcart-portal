@@ -74,6 +74,15 @@ is wired up yet — there's no staff dashboard, so an order stuck at
 `queued` currently has to be moved along by hand-editing the Supabase
 table (Phase H fixes this).
 
+Chat is persisted for real now (`messages` table, `getOrderMessages`,
+`sendCustomerMessageAction`) -- the scripted assistant replies fire from
+the same actions that drive the state machine above, not from a
+client-side script. What's still missing is live push: `/order/[token]`
+only sees new messages/status after one of *this browser's* own actions
+triggers a `router.refresh()`. A staff reply or another tab's change
+won't appear until this page's next action or a manual reload -- that's
+Supabase Realtime, the other half of Phase G.
+
 ## Fulfillment abstraction
 
 `DeliveryProvider` interface (`prepareDelivery`, `startDelivery`,
@@ -94,9 +103,17 @@ the staff workflow — it does not touch Roblox/MM2 itself. Nothing outside
   calls Roblox's actual public username/avatar API, not a mock. Shared by
   both `/order/demo` and `/order/[token]`.
 - **Phase E/F** (DB schema, persistence): done for the slice that's
-  wired up — see "Order domain" above. `messages` table exists but
-  nothing reads/writes it yet (that's chat, Phase G).
+  wired up — see "Order domain" above.
+- **Phase G** (chat): persistence done (see "Order domain" above); live
+  push (Supabase Realtime) not started.
 - **Phase L** (Shopify webhook): done for `orders/paid` → order creation.
+  The post-purchase auto-redirect (`/redirecting` + `/api/orders/lookup`)
+  is built but not wired up in Shopify yet — needs a Checkout UI
+  Extension (a real Shopify app), since the old Additional-Scripts
+  approach it would have used is fully retired platform-wide as of June
+  30, 2026. That requires the Shopify CLI running somewhere with real
+  network access, which this environment doesn't have — deploying it is
+  a follow-up task, not something blocking anything built so far.
   Fulfillment write-back to Shopify (marking the Shopify order fulfilled
   once delivered) isn't built.
 - `/order/[token]` is real and interactive up through "queued" (see
