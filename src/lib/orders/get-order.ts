@@ -60,25 +60,36 @@ function mapRowToOrder(row: OrderRow): Order {
 }
 
 export async function getOrderByToken(token: string): Promise<Order | null> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("orders")
-    .select(
+  // Everything here -- including client construction, which throws if
+  // Supabase isn't configured -- is wrapped in one try/catch so a
+  // misconfiguration never crashes the page with Next's generic error
+  // screen. The customer just sees "order not found" either way; the real
+  // reason (bad config vs. genuinely no such order) goes to server logs,
+  // never the client (see spec: friendly errors, no stack traces exposed).
+  try {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        `
+        id, public_order_number, status, total, currency,
+        customer_ready_at, delivered_at, created_at,
+        roblox_accounts ( roblox_user_id, username, display_name, avatar_url ),
+        order_items ( id, name, image_url, quantity, price, fulfilled )
       `
-      id, public_order_number, status, total, currency,
-      customer_ready_at, delivered_at, created_at,
-      roblox_accounts ( roblox_user_id, username, display_name, avatar_url ),
-      order_items ( id, name, image_url, quantity, price, fulfilled )
-    `
-    )
-    .eq("public_access_token", token)
-    .maybeSingle<OrderRow>();
+      )
+      .eq("public_access_token", token)
+      .maybeSingle<OrderRow>();
 
-  if (error) {
-    console.error("getOrderByToken failed:", error.message);
+    if (error) {
+      console.error("getOrderByToken query failed:", error.message);
+      return null;
+    }
+    if (!data) return null;
+
+    return mapRowToOrder(data);
+  } catch (err) {
+    console.error("getOrderByToken failed:", err instanceof Error ? err.message : err);
     return null;
   }
-  if (!data) return null;
-
-  return mapRowToOrder(data);
 }
