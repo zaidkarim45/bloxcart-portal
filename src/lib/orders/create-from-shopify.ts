@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getPortalUrl } from "@/lib/config";
 import { notifyDiscord } from "@/lib/discord/notify";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { generateOrderToken } from "@/lib/security/tokens";
@@ -108,7 +109,7 @@ export async function createOrderFromShopifyPayload(
   });
 
   await notifyDiscord(
-    `🛒 **New order ${payload.name}** — ${payload.currency} ${payload.total_price} — ${payload.email ?? "no email"}\nhttps://bloxcart-portal.vercel.app/staff/${order.id}`
+    `🛒 **New order ${payload.name}** — ${payload.currency} ${payload.total_price} — ${payload.email ?? "no email"}\n${getPortalUrl()}/staff/${order.id}`
   );
 
   return { created: true, token };

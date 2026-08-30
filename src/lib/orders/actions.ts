@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { getPortalUrl } from "@/lib/config";
 import { workflowMessages } from "@/lib/delivery/messages";
 import { notifyDiscord } from "@/lib/discord/notify";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -152,7 +153,7 @@ export async function sendCustomerMessageAction(token: string, text: string): Pr
   await insertMessage(supabase, order.id, "customer", text);
 
   await notifyDiscord(
-    `💬 **New message on order #${order.public_order_number}**\n"${text}"\nhttps://bloxcart-portal.vercel.app/staff/${order.id}`
+    `💬 **New message on order #${order.public_order_number}**\n"${text}"\n${getPortalUrl()}/staff/${order.id}`
   );
 
   // Staff can now reply directly from /staff/[id] (Phase H) -- while an
