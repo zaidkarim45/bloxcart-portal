@@ -21,20 +21,20 @@ import {
 } from "@/lib/orders/actions";
 import type { ChatMessageData, Order } from "@/lib/types/order";
 import type { RobloxProfile } from "@/lib/roblox/types";
+import { useLiveMessages } from "@/hooks/use-live-messages";
 
 /**
  * The real, persisted counterpart to `/order/demo`'s client-side mock --
  * every action here calls a server action that writes to Supabase, then
  * `router.refresh()` re-fetches the Server Component tree so what's on
  * screen always reflects the database, never optimistic local state that
- * could drift from it. Chat messages get one exception: a locally-held
- * "pending" bubble for the customer's own just-sent message, cleared once
- * the refreshed (authoritative) message list arrives, so sending doesn't
- * feel laggy while still never trusting local state over the database.
+ * could drift from it.
  *
- * No live push yet (Supabase Realtime) -- if a staff member or another
- * tab changes this order, this page won't see it until the next action or
- * manual refresh. That's the remaining half of Phase G.
+ * Chat is the one exception to "refresh to see changes": it polls
+ * /api/order/[token]/messages every few seconds via useLiveMessages, so a
+ * staff reply shows up on its own instead of needing a manual refresh.
+ * Sending still shows an optimistic bubble immediately (addPending),
+ * cleared the moment the next poll confirms the real row landed.
  */
 export function RealOrderPageClient({
   initialOrder,
@@ -50,18 +50,7 @@ export function RealOrderPageClient({
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [pendingMessage, setPendingMessage] = useState<ChatMessageData | null>(null);
-
-  // Clears the optimistic bubble once a fresh (authoritative) message list
-  // arrives from the server -- adjusted during render rather than in an
-  // effect, per React's guidance for resetting state on a prop change.
-  const [seenMessages, setSeenMessages] = useState(initialMessages);
-  if (initialMessages !== seenMessages) {
-    setSeenMessages(initialMessages);
-    setPendingMessage(null);
-  }
-
-  const messages = pendingMessage ? [...initialMessages, pendingMessage] : initialMessages;
+  const { messages, addPending } = useLiveMessages(initialMessages, `/api/order/${token}/messages`);
 
   const timeline = buildOrderTimeline(order);
   const fulfilledCount = order.items.filter((item) => item.fulfilled).length;
@@ -92,8 +81,8 @@ export function RealOrderPageClient({
   }
 
   function handleSendMessage(text: string) {
-    setPendingMessage({
-      id: "pending",
+    addPending({
+      id: `pending-${Date.now()}`,
       sender: "customer",
       text,
       createdAt: new Date().toISOString(),
@@ -103,7 +92,6 @@ export function RealOrderPageClient({
       if (!result.ok) {
         setActionError(result.error ?? "Your message didn't send. Please try again.");
       }
-      router.refresh();
     });
   }
 

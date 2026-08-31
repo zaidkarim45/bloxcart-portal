@@ -10,6 +10,7 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { sendStaffMessageAction, updateOrderStatusAction } from "@/lib/staff/actions";
 import type { StaffOrderDetail } from "@/lib/staff/get-orders";
 import type { ChatMessageData, OrderStatus } from "@/lib/types/order";
+import { useLiveMessages } from "@/hooks/use-live-messages";
 import { TerminalActions } from "./terminal-actions";
 
 // Delivered/cancelled/refunded are excluded here on purpose -- those go
@@ -43,12 +44,22 @@ export function StaffOrderClient({
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const { messages, addPending } = useLiveMessages(
+    initialMessages,
+    `/api/staff/orders/${order.id}/messages`
+  );
 
   function handleSend(text: string) {
+    addPending({
+      id: `pending-${Date.now()}`,
+      sender: "agent",
+      agentName: "Staff",
+      text,
+      createdAt: new Date().toISOString(),
+    });
     startTransition(async () => {
       const result = await sendStaffMessageAction(order.id, text);
       if (!result.ok) setError(result.error ?? "Message failed to send.");
-      router.refresh();
     });
   }
 
@@ -143,7 +154,7 @@ export function StaffOrderClient({
         </motion.div>
 
         <div className="h-[32rem]">
-          <ChatWindow messages={initialMessages} isAssistantTyping={false} onSend={handleSend} />
+          <ChatWindow messages={messages} isAssistantTyping={false} onSend={handleSend} />
         </div>
       </div>
     </div>

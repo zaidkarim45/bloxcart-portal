@@ -11,13 +11,20 @@ interface MessageRow {
   created_at: string;
 }
 
-export async function getOrderMessages(orderId: string): Promise<ChatMessageData[]> {
+export async function getOrderMessages(orderId: string, after?: string): Promise<ChatMessageData[]> {
   const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("messages")
     .select("id, sender, agent_name, content, created_at")
     .eq("order_id", orderId)
     .order("created_at", { ascending: true });
+
+  // `after` (an ISO timestamp) is how the polling endpoints ask for only
+  // what's new since the client's last fetch, instead of the whole
+  // history every few seconds.
+  if (after) query = query.gt("created_at", after);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("getOrderMessages failed:", error.message);

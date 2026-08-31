@@ -3,7 +3,18 @@ import { HelpCircle, ExternalLink } from "lucide-react";
 
 import { brand } from "@/lib/brand";
 
+// brand.storeUrl falls back to this placeholder when NEXT_PUBLIC_STORE_URL
+// isn't set in the deploy environment. Sending customers to example.com
+// with no visible error is worse than not showing the button at all --
+// target="_blank" already opens it in a new tab (their order page is
+// never touched, nothing to "lose"), so if this still feels like it loses
+// their place, the real fix is setting NEXT_PUBLIC_STORE_URL to the real
+// store domain, not the link's behavior.
+const STORE_URL_PLACEHOLDER = "https://example.com";
+
 export function OrderHeader() {
+  const hasRealStoreUrl = brand.storeUrl !== STORE_URL_PLACEHOLDER;
+
   return (
     <header className="flex items-center justify-between border-b border-border-muted px-4 py-4 sm:px-6">
       <Link href="/" className="text-base font-bold tracking-tight text-foreground">
@@ -14,15 +25,17 @@ export function OrderHeader() {
           <HelpCircle className="h-4 w-4" />
           Help
         </a>
-        <a
-          href={brand.storeUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 hover:text-foreground"
-        >
-          Visit Store
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
+        {hasRealStoreUrl ? (
+          <a
+            href={brand.storeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+          >
+            Visit Store
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
       </div>
     </header>
   );
